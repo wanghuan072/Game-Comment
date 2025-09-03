@@ -296,7 +296,6 @@ app.get('/health', (req, res) => {
 // --- 导出给 Vercel ---
 export default app;
 
-// --- 本地开发服务器 ---
 if (!process.env.VERCEL) {
   // 初始化数据库并启动服务器
   initializeDatabase().then(() => {
