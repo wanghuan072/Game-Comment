@@ -12,8 +12,17 @@ async function request(endpoint, options = {}) {
     ...options,
   };
 
+  // 添加调试信息
+  console.log('API请求调试信息:');
+  console.log('- API_BASE_URL:', API_BASE_URL);
+  console.log('- 完整URL:', url);
+  console.log('- 请求配置:', config);
+
   try {
     const response = await fetch(url, config);
+    console.log('- 响应状态:', response.status);
+    console.log('- 响应头:', response.headers);
+    
     const data = await response.json();
 
     if (!response.ok) {
@@ -23,6 +32,8 @@ async function request(endpoint, options = {}) {
     return data;
   } catch (error) {
     console.error('API请求错误:', error);
+    console.error('- 错误类型:', error.name);
+    console.error('- 错误消息:', error.message);
     throw error;
   }
 }

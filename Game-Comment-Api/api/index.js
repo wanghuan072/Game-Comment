@@ -62,6 +62,15 @@ app.get('/health', (req, res) => {
   });
 });
 
+// 简单的测试端点
+app.get('/test', (req, res) => {
+  res.json({
+    message: 'API连接测试成功',
+    timestamp: new Date().toISOString(),
+    origin: req.headers.origin || 'none'
+  });
+});
+
 // 公开API路由
 app.post('/comments', async (req, res) => {
   try {
