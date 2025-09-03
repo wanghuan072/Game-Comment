@@ -26,12 +26,21 @@ const allowedOrigins = [
   process.env.FRONTEND_URL  // 生产环境前端地址
 ].filter(Boolean); // 过滤掉undefined值
 
-app.use(cors({
-  origin: allowedOrigins,
+// 开发环境允许所有来源，生产环境使用限制的域名
+const corsOptions = {
+  origin: process.env.NODE_ENV === 'production' ? allowedOrigins : true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
-}));
+};
+
+app.use(cors(corsOptions));
+
+// 添加请求日志中间件
+app.use((req, res, next) => {
+  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
+  next();
+});
 
 // 速率限制
 const limiter = rateLimit({
