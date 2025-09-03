@@ -1,11 +1,6 @@
 /**
- * 数据库初始化脚本
- * 用于在Neon数据库中创建必要的表结构和初始数据
- * 支持多项目共享数据库，通过表名前缀区分不同项目
- * 
- * 使用方法:
- * 1. 配置 .env 文件中的 DATABASE_URL 和 PROJECT_PREFIX
- * 2. 运行: node scripts/init-database.js
+ * 数据库初始化脚本 - 模板项目
+ * 为新的项目前缀创建必要的数据库表
  */
 
 import 'dotenv/config';
@@ -13,163 +8,103 @@ import { neon } from '@neondatabase/serverless';
 import bcrypt from 'bcrypt';
 
 const sql = neon(process.env.DATABASE_URL);
-
-// 获取项目前缀，用于表名区分
-const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'game_comment';
-console.log(`[数据库初始化] 使用项目前缀: ${PROJECT_PREFIX}`);
+const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'my_project';
 
 async function initializeDatabase() {
   try {
     console.log('🚀 开始初始化数据库...');
-
-    // 1. 创建统一管理员表（所有项目共享）
-    console.log('📝 创建统一管理员表...');
-    await sql`
-      CREATE TABLE IF NOT EXISTS game_admins_users (
-        id SERIAL PRIMARY KEY,
-        username VARCHAR(50) UNIQUE NOT NULL,
-        password VARCHAR(255) NOT NULL,
-        role VARCHAR(20) DEFAULT 'admin',
-        project_id VARCHAR(50) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        last_login_at TIMESTAMP
-      )
-    `;
-
-    // 2. 创建项目特定游戏表（带前缀）
-    console.log(`🎮 创建游戏表 ${PROJECT_PREFIX}_games...`);
-    const gamesTableName = `${PROJECT_PREFIX}_games`;
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(gamesTableName)} (
-        id SERIAL PRIMARY KEY,
-        address_bar VARCHAR(100) UNIQUE NOT NULL,
-        title VARCHAR(200) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
-
-    // 3. 创建项目特定评论表（带前缀）
-    console.log(`💬 创建评论表 ${PROJECT_PREFIX}_comments...`);
-    const commentsTableName = `${PROJECT_PREFIX}_comments`;
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(commentsTableName)} (
+    console.log(`📊 项目前缀: ${PROJECT_PREFIX}`);
+    
+    // 1. 创建反馈表（如果不存在）
+    console.log('\n1️⃣ 创建反馈表...');
+    
+    const createFeedbackTableSQL = `
+      CREATE TABLE IF NOT EXISTS ${PROJECT_PREFIX}_feedback (
         id SERIAL PRIMARY KEY,
         game_address_bar VARCHAR(100) NOT NULL,
         name VARCHAR(100) NOT NULL,
-        email VARCHAR(254),
-        text TEXT NOT NULL,
+        email VARCHAR(100),
+        text TEXT,
+        rating INTEGER CHECK (rating >= 1 AND rating <= 5),
         added_by_admin BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(gamesTableName)}(address_bar) ON DELETE CASCADE
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-
-    // 4. 创建项目特定评分表（带前缀）
-    console.log(`⭐ 创建评分表 ${PROJECT_PREFIX}_ratings...`);
-    const ratingsTableName = `${PROJECT_PREFIX}_ratings`;
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(ratingsTableName)} (
+    
+    await sql(createFeedbackTableSQL);
+    console.log(`✅ 创建反馈表 ${PROJECT_PREFIX}_feedback`);
+    
+    // 2. 创建索引（如果不存在）
+    console.log('\n2️⃣ 创建索引...');
+    
+    await sql(`CREATE INDEX IF NOT EXISTS idx_${PROJECT_PREFIX}_feedback_game_address_bar ON ${PROJECT_PREFIX}_feedback(game_address_bar)`);
+    console.log(`✅ 创建游戏地址索引`);
+    
+    await sql(`CREATE INDEX IF NOT EXISTS idx_${PROJECT_PREFIX}_feedback_created_at ON ${PROJECT_PREFIX}_feedback(created_at)`);
+    console.log(`✅ 创建时间索引`);
+    
+    // 3. 创建管理员表（全局共享，如果不存在）
+    console.log('\n3️⃣ 创建管理员表...');
+    
+    const createAdminTableSQL = `
+      CREATE TABLE IF NOT EXISTS game_admins_users (
         id SERIAL PRIMARY KEY,
-        game_address_bar VARCHAR(100) NOT NULL,
-        rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(gamesTableName)}(address_bar) ON DELETE CASCADE
+        username VARCHAR(50) UNIQUE NOT NULL,
+        password_hash VARCHAR(255) NOT NULL,
+        role VARCHAR(20) DEFAULT 'admin',
+        project_id VARCHAR(50) NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `;
-
-    // 5. 创建项目特定评分统计视图（带前缀）
-    console.log(`📊 创建评分统计视图 ${PROJECT_PREFIX}_rating_stats...`);
-    const ratingStatsViewName = `${PROJECT_PREFIX}_rating_stats`;
-    await sql`
-      CREATE OR REPLACE VIEW ${sql(ratingStatsViewName)} AS
-      SELECT 
-        game_address_bar,
-        COUNT(*) as total_votes,
-        AVG(rating) as average_rating,
-        COUNT(CASE WHEN rating = 1 THEN 1 END) as rating_1,
-        COUNT(CASE WHEN rating = 2 THEN 1 END) as rating_2,
-        COUNT(CASE WHEN rating = 3 THEN 1 END) as rating_3,
-        COUNT(CASE WHEN rating = 4 THEN 1 END) as rating_4,
-        COUNT(CASE WHEN rating = 5 THEN 1 END) as rating_5
-      FROM ${sql(ratingsTableName)}
-      GROUP BY game_address_bar
-    `;
-
-    // 6. 创建索引以提高查询性能（带前缀）
-    console.log('🔍 创建索引...');
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_game_address_bar')} ON ${sql(commentsTableName)}(game_address_bar)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_created_at')} ON ${sql(commentsTableName)}(created_at)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_game_address_bar')} ON ${sql(ratingsTableName)}(game_address_bar)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_created_at')} ON ${sql(ratingsTableName)}(created_at)`;
-
-    // 7. 创建默认管理员账户（带项目ID）
-    console.log(`👤 创建默认管理员账户 (项目: ${PROJECT_PREFIX})...`);
+    
+    await sql(createAdminTableSQL);
+    console.log('✅ 创建管理员表 game_admins_users (全局共享)');
+    
+    // 4. 检查并创建默认管理员账户
+    console.log('\n4️⃣ 检查管理员账户...');
+    
     const existingAdmin = await sql`
-      SELECT id FROM game_admins_users WHERE username = 'admin' AND project_id = ${PROJECT_PREFIX}
+      SELECT id FROM game_admins_users 
+      WHERE username = 'admin' AND project_id = ${PROJECT_PREFIX}
     `;
     
     if (existingAdmin.length === 0) {
-      const initialPassword = process.env.ADMIN_PASSWORD || 'admin123';
-      const hashedPassword = await bcrypt.hash(initialPassword, 10);
-      
+      const hashedPassword = await bcrypt.hash('admin123', 10);
       await sql`
         INSERT INTO game_admins_users (username, password, role, project_id)
         VALUES ('admin', ${hashedPassword}, 'admin', ${PROJECT_PREFIX})
       `;
-      
-      console.log('✅ 默认管理员账户创建成功');
-      console.log(`   用户名: admin`);
-      console.log(`   项目ID: ${PROJECT_PREFIX}`);
-      console.log(`   密码: ${initialPassword}`);
-      console.log('   ⚠️  请在生产环境中立即修改默认密码！');
+      console.log(`✅ 创建默认管理员账户 (项目: ${PROJECT_PREFIX})`);
     } else {
-      console.log('ℹ️  管理员账户已存在，跳过创建');
+      console.log(`ℹ️ 管理员账户已存在 (项目: ${PROJECT_PREFIX})`);
     }
-
-    // 8. 插入示例游戏数据（可选，使用前缀表）
-    console.log(`🎯 插入示例游戏数据到 ${PROJECT_PREFIX}_games...`);
-    const existingGames = await sql`
-      SELECT address_bar FROM ${sql(PROJECT_PREFIX + '_games')} LIMIT 1
+    
+    // 5. 验证表结构
+    console.log('\n5️⃣ 验证表结构...');
+    
+    const feedbackTableExists = await sql`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_name = ${PROJECT_PREFIX + '_feedback'}
     `;
     
-    if (existingGames.length === 0) {
-      // 从 games.js 数据中插入示例游戏
-      const sampleGames = [
-        { address_bar: 'aaa', title: '示例游戏 A' },
-        { address_bar: 'bbb', title: '示例游戏 B' },
-        { address_bar: 'ccc', title: '示例游戏 C' }
-      ];
-      
-      for (const game of sampleGames) {
-        await sql`
-          INSERT INTO ${sql(PROJECT_PREFIX + '_games')} (address_bar, title)
-          VALUES (${game.address_bar}, ${game.title})
-          ON CONFLICT (address_bar) DO NOTHING
-        `;
-      }
-      
-      console.log('✅ 示例游戏数据插入成功');
+    const adminTableExists = await sql`
+      SELECT table_name FROM information_schema.tables 
+      WHERE table_name = 'game_admins_users'
+    `;
+    
+    if (feedbackTableExists.length > 0 && adminTableExists.length > 0) {
+      console.log('✅ 数据库初始化完成！');
+      console.log(`📋 创建的表:`);
+      console.log(`   - ${PROJECT_PREFIX}_feedback (反馈表)`);
+      console.log(`   - game_admins_users (管理员表)`);
+      console.log(`🔑 默认管理员账户:`);
+      console.log(`   用户名: admin`);
+      console.log(`   密码: admin123`);
+      console.log(`   项目: ${PROJECT_PREFIX}`);
     } else {
-      console.log('ℹ️  游戏数据已存在，跳过插入');
+      throw new Error('表创建验证失败');
     }
-
-    console.log('🎉 数据库初始化完成！');
-    console.log('');
-    console.log('📋 下一步操作:');
-    console.log('1. 启动API服务器: npm start');
-    console.log('2. 访问管理面板: /admin/login');
-    console.log(`3. 使用默认账户登录 (项目: ${PROJECT_PREFIX}) 并修改密码`);
-    console.log('4. 根据需要添加更多游戏数据');
-    console.log('');
-    console.log('📊 创建的表结构:');
-    console.log(`   - game_admins_users (统一用户表)`);
-    console.log(`   - ${PROJECT_PREFIX}_games (游戏表)`);
-    console.log(`   - ${PROJECT_PREFIX}_comments (评论表)`);
-    console.log(`   - ${PROJECT_PREFIX}_ratings (评分表)`);
-    console.log(`   - ${PROJECT_PREFIX}_rating_stats (评分统计视图)`);
-
+    
   } catch (error) {
     console.error('❌ 数据库初始化失败:', error);
     process.exit(1);

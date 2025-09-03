@@ -98,12 +98,12 @@
 
       <!-- 右列：评分/评论（静态数据版，可作为模板替换为真实逻辑） -->
       <aside class="sidebar" v-if="!isPageFullscreen">
-        <!-- 评分概览 -->
+        <!-- 评分概览（展示区域） -->
         <div class="panel">
-          <h3 class="panel-title">Rate & Comment</h3>
-          <div v-if="loadingData" class="loading-text">加载中...</div>
+          <h3 class="panel-title">Rating Overview</h3>
+          <div v-if="loadingData" class="loading-text">Loading...</div>
           <div v-else class="summary-row">
-            <div class="summary-score">{{ averageRating.toFixed(1) }}</div>
+            <div class="summary-score">{{ Number(averageRating).toFixed(1) }}</div>
             <div class="summary-stars" aria-label="average rating">
               <span
                 v-for="n in 5"
@@ -113,30 +113,33 @@
                 >★</span
               >
             </div>
-            <div class="summary-count">{{ ratingStats.count }} 人评分</div>
+            <div class="summary-count">{{ ratingStats.count }} ratings</div>
           </div>
           
-          <!-- 快速评分按钮 -->
-          <div v-if="!loadingData" class="quick-rating">
-            <div class="quick-rating-label">快速评分：</div>
-            <div class="quick-rating-stars">
-              <button
-                v-for="n in 5"
-                :key="n"
-                class="star-btn"
-                :class="{ active: userRating >= n }"
-                @click="submitRating(n)"
-                :disabled="submitting"
-              >
-                ⭐
-              </button>
+          <!-- 评分分布 -->
+          <div v-if="!loadingData && ratingStats.count > 0" class="rating-distribution">
+            <div v-for="n in 5" :key="n" class="rating-bar">
+              <span class="rating-label">{{ n }}★</span>
+              <div class="bar-container">
+                <div 
+                  class="bar" 
+                  :style="{ width: getRatingPercentage(n) + '%' }"
+                ></div>
+              </div>
+              <span class="rating-count">{{ getRatingCount(n) }}</span>
             </div>
+          </div>
+          <div v-else-if="!loadingData && ratingStats.count === 0" class="no-ratings">
+            <p class="muted small">No rating data available</p>
           </div>
         </div>
 
-        <!-- 写评论（静态表单占位） -->
+        <!-- 写评论（提交区域） -->
         <div class="panel">
           <h3 class="panel-title">Write Your Review</h3>
+          
+
+          
           <div class="field">
             <label class="label">Nickname <span class="req">*</span></label>
             <input
@@ -153,10 +156,18 @@
                 v-for="n in 5"
                 :key="n"
                 class="star"
-                :class="{ filled: n <= form.rating }"
+                :class="{ 
+                  filled: n <= form.rating,
+                  hover: n <= hoverRating && hoverRating > 0
+                }"
                 @click="selectRating(n)"
-                >★</span
+                @mouseenter="hoverRating = n"
+                @mouseleave="hoverRating = 0"
+                >{{ n <= (hoverRating || form.rating) ? '★' : '☆' }}</span
               >
+            </div>
+            <div v-if="form.rating > 0" class="rating-selected">
+              Selected {{ form.rating }} star rating
             </div>
           </div>
           <div class="field">
@@ -170,24 +181,40 @@
             ></textarea>
             <div class="hint">{{ form.comment.length }}/1000</div>
           </div>
-          <button class="btn wide" @click="submitReview" :disabled="submitting">
-            {{ submitting ? '提交中...' : 'Submit Review' }}
+          <button 
+            class="btn wide" 
+            @click="submitReview" 
+            :disabled="submitting || !form.nickname || !form.comment || !form.rating"
+          >
+            {{ submitting ? 'Submitting...' : 'Submit Review' }}
           </button>
-          <p class="muted small">已接入真实API系统，数据将保存到数据库。</p>
+          <p class="muted small">Connected to real API system, data will be saved to database.</p>
         </div>
 
         <!-- 评论列表 -->
         <div class="panel">
           <h3 class="panel-title">All Reviews ({{ reviews.length }})</h3>
-          <div v-if="loadingData" class="loading-text">加载中...</div>
+          <div v-if="loadingData" class="loading-text">Loading...</div>
           <div v-else-if="reviews.length === 0" class="no-reviews">
-            暂无评论，成为第一个评论者吧！
+            No reviews yet, be the first to review!
           </div>
           <ul v-else class="reviews">
             <li v-for="r in reviews" :key="r.id" class="review-item">
               <div class="review-head">
                 <span class="review-name">{{ r.name }}</span>
                 <span class="review-date">{{ formatDate(r.timestamp) }}</span>
+              </div>
+              <div v-if="r.rating" class="review-rating">
+                <span class="review-rating-label">Rating:</span>
+                <div class="review-stars">
+                  <span
+                    v-for="n in 5"
+                    :key="n"
+                    class="star"
+                    :class="{ filled: n <= r.rating }"
+                    >★</span
+                  >
+                </div>
               </div>
               <p class="review-text">{{ r.text }}</p>
             </li>
@@ -220,18 +247,70 @@ const game = computed(() => games.find((g) => g.addressBar === route.params.addr
 
 // 动态评分与评论数据
 const reviews = ref([])
-const ratingStats = ref({ average: 0, count: 0 })
+const ratingStats = ref({ average: 0, count: 0, ratings: { '1': 0, '2': 0, '3': 0, '4': 0, '5': 0 } })
 const userRating = ref(0)
 const submitting = ref(false)
 const loadingData = ref(false)
 
 // 表单状态
-const form = ref({ nickname: '', rating: 3, comment: '' })
+const form = ref({ nickname: '', rating: 0, comment: '' })
+const hoverRating = ref(0)
+
+// 提交限制
+const lastSubmitTime = ref(null)
+const remainingTime = ref(0)
+const canSubmit = ref(true)
 
 // 计算平均评分
 const averageRating = computed(() => {
-  return ratingStats.value.average || 0
+  const avg = ratingStats.value.average
+  return typeof avg === 'number' ? avg : 0
 })
+
+// 获取评分数量
+function getRatingCount(rating) {
+  return ratingStats.value.ratings?.[String(rating)] || 0
+}
+
+// 获取评分百分比
+function getRatingPercentage(rating) {
+  const count = getRatingCount(rating)
+  const total = ratingStats.value.count || 1
+  return Math.round((count / total) * 100)
+}
+
+// 检查是否可以提交
+function checkCanSubmit() {
+  if (!lastSubmitTime.value) {
+    canSubmit.value = true
+    return
+  }
+  
+  const now = Date.now()
+  const timeDiff = now - lastSubmitTime.value
+  const oneMinute = 60 * 1000
+  
+  if (timeDiff >= oneMinute) {
+    canSubmit.value = true
+    remainingTime.value = 0
+  } else {
+    canSubmit.value = false
+    remainingTime.value = Math.ceil((oneMinute - timeDiff) / 1000)
+  }
+}
+
+// 定时器更新剩余时间
+let timer = null
+function startTimer() {
+  if (timer) clearInterval(timer)
+  timer = setInterval(() => {
+    checkCanSubmit()
+    if (canSubmit.value) {
+      clearInterval(timer)
+      timer = null
+    }
+  }, 1000)
+}
 
 // 加载评论和评分数据
 const loadData = async () => {
@@ -257,54 +336,55 @@ const loadData = async () => {
   }
 }
 
-// 选择评分
-function selectRating(n) {
-  form.value.rating = n
-}
 
-// 提交评论
+
+// 提交评论和评分（一起提交）
 async function submitReview() {
-  if (!form.value.nickname || !form.value.comment || submitting.value) return
+  if (!form.value.nickname || !form.value.comment || !form.value.rating || submitting.value) return
+  
+  // 检查时间限制
+  if (!canSubmit.value) {
+    alert(`⏰ You can only submit once per minute. Please wait ${remainingTime.value} seconds before trying again.`)
+    return
+  }
   
   submitting.value = true
   try {
+    // 提交评论（包含评分信息）
     const commentData = {
       pageId: game.value.addressBar,
       name: form.value.nickname,
       email: undefined, // 前端表单没有邮箱字段
-      text: form.value.comment
+      text: form.value.comment,
+      rating: form.value.rating // 将评分包含在评论数据中
     }
     
+    // 提交评论（后端会同时处理评分）
     const newComment = await commentAPI.submitComment(commentData)
-    reviews.value.unshift(newComment)
+    
+    // 重新加载数据以获取最新的评分统计
+    await loadData()
+    
+    // 设置提交时间限制
+    lastSubmitTime.value = Date.now()
+    checkCanSubmit()
+    startTimer()
     
     // 清空表单
-    form.value = { nickname: '', rating: 3, comment: '' }
+    form.value = { nickname: '', rating: 0, comment: '' }
+    hoverRating.value = 0
     
-    alert('评论提交成功！')
+    alert('Review and rating submitted successfully!')
   } catch (error) {
-    alert('评论提交失败: ' + error.message)
+    alert('Submission failed: ' + error.message)
   } finally {
     submitting.value = false
   }
 }
 
-// 提交评分
-async function submitRating(rating) {
-  try {
-    const ratingData = {
-      pageId: game.value.addressBar,
-      rating: rating
-    }
-    
-    const updatedStats = await ratingAPI.submitRating(ratingData)
-    ratingStats.value = updatedStats
-    userRating.value = rating
-    
-    alert('评分提交成功！')
-  } catch (error) {
-    alert('评分提交失败: ' + error.message)
-  }
+// 选择评分（仅用于表单中的评分选择）
+function selectRating(n) {
+  form.value.rating = n
 }
 
 // 日期格式化（用于评论时间显示）
@@ -379,10 +459,19 @@ onMounted(async () => {
   
   // 加载评论和评分数据
   await loadData()
+  
+  // 检查提交限制
+  checkCanSubmit()
 })
 
 onUnmounted(() => {
   if (isPageFullscreen.value) exitPageFullscreen()
+  
+  // 清理定时器
+  if (timer) {
+    clearInterval(timer)
+    timer = null
+  }
 })
 </script>
 
@@ -572,12 +661,18 @@ onUnmounted(() => {
 }
 
 .summary-stars .star,
-.review-stars .star {
-  color: #d1d5db; /* 未填充星 */
+.review-stars .star,
+.stars-input .star {
+  color: #d1d5db; /* 默认灰色 */
+  transition: color 0.2s;
 }
 .summary-stars .star.filled,
-.review-stars .star.filled {
-  color: #f59e0b; /* 填充星（琥珀色） */
+.review-stars .star.filled,
+.stars-input .star.filled {
+  color: #f59e0b; /* 实心星（琥珀色） */
+}
+.stars-input .star.hover {
+  color: #fbbf24; /* hover时浅橙色 */
 }
 
 .field {
@@ -721,6 +816,82 @@ onUnmounted(() => {
 .star-btn:disabled {
   opacity: 0.3;
   cursor: not-allowed;
+}
+
+/* 评分分布样式 */
+.rating-distribution {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e7eb;
+}
+
+.rating-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.rating-label {
+  width: 30px;
+  color: #666;
+}
+
+.bar-container {
+  flex: 1;
+  height: 8px;
+  background: #e5e7eb;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar {
+  height: 100%;
+  background: #f59e0b;
+  transition: width 0.3s ease;
+}
+
+.rating-count {
+  width: 20px;
+  text-align: right;
+  color: #666;
+}
+
+
+
+/* 无评分数据样式 */
+.no-ratings {
+  text-align: center;
+  padding: 12px;
+  color: #666;
+  font-style: italic;
+}
+
+/* 评分选择提示 */
+.rating-selected {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #059669;
+  font-weight: 500;
+}
+
+/* 评论中的评分显示 */
+.review-rating {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.review-rating-label {
+  color: #666;
+}
+
+.review-stars {
+  display: flex;
+  gap: 2px;
 }
 
 /* 自适应 */

@@ -28,7 +28,7 @@ const router = createRouter({
     {
       path: '/games/:addressBar',
       name: 'game-detail',
-      component: () => import('@/views/GameDetail.vue')
+      component: () => import('@/components/GameDetail.vue')
     },
     // 管理员路由
     {
@@ -43,32 +43,11 @@ const router = createRouter({
     {
       path: '/admin/dashboard',
       name: 'AdminDashboard',
-      component: () => import('@/views/admin/Dashboard.vue'),
+      component: () => import('@/views/admin/CommentRatingManagement.vue'),
       meta: { 
         requiresAuth: true,
         hideFromSEO: true
-      },
-      redirect: '/admin/dashboard/comments',
-      children: [
-        {
-          path: 'comments',
-          name: 'AdminComments',
-          component: () => import('@/views/admin/CommentRatingManagement.vue'),
-          meta: { 
-            requiresAuth: true,
-            hideFromSEO: true
-          }
-        },
-        {
-          path: 'settings',
-          name: 'AdminSettings',
-          component: () => import('@/views/admin/Settings.vue'),
-          meta: { 
-            requiresAuth: true,
-            hideFromSEO: true
-          }
-        }
-      ]
+      }
     }
   ],
 })

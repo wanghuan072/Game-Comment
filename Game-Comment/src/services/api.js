@@ -59,28 +59,39 @@ export const adminAPI = {
     body: JSON.stringify(credentials),
   }),
   
-  // 获取所有游戏数据
-  getAllGameData: (token) => request('/admin/comments', {
+  // 获取所有反馈数据
+  getAllGameData: (token) => request('/admin/feedback', {
     headers: {
       'Authorization': `Bearer ${token}`,
     },
   }),
   
-  // 删除评论
-  deleteComment: (pageId, commentId, token) => request(`/admin/comments/${pageId}/${commentId}`, {
+  // 删除反馈
+  deleteFeedback: (pageId, feedbackId, token) => request(`/admin/feedback/${pageId}/${feedbackId}`, {
     method: 'DELETE',
     headers: {
       'Authorization': `Bearer ${token}`,
     },
   }),
   
-  // 手动添加评论
-  addManualComment: (commentData, token) => request('/admin/comments/manual', {
+  // 手动添加反馈
+  addManualFeedback: (feedbackData, token) => request('/admin/feedback/manual', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(commentData),
+    body: JSON.stringify(feedbackData),
+  }),
+  
+  // 更新反馈
+  updateFeedback: (pageId, feedbackId, feedbackData, token) => request(`/admin/feedback/${pageId}/${feedbackId}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(feedbackData),
   }),
   
   // 更新评分
