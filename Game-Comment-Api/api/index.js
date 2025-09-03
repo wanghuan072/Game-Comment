@@ -37,11 +37,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// 添加请求日志中间件
-app.use((req, res, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
-  next();
-});
+
 
 // 速率限制
 const limiter = rateLimit({
@@ -63,44 +59,7 @@ app.get('/health', (req, res) => {
   });
 });
 
-// 简单的测试端点
-app.get('/test', (req, res) => {
-  res.json({
-    message: 'API连接测试成功',
-    timestamp: new Date().toISOString(),
-    origin: req.headers.origin || 'none'
-  });
-});
 
-// 更简单的测试端点（不需要数据库）
-app.get('/ping', (req, res) => {
-  res.json({ message: 'pong', timestamp: new Date().toISOString() });
-});
-
-// 测试数据库连接
-app.get('/db-test', async (req, res) => {
-  try {
-    const sql = (await import('@neondatabase/serverless')).neon(process.env.DATABASE_URL);
-    const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'game_comment';
-    
-    // 测试数据库连接
-    const result = await sql`SELECT 1 as test`;
-    
-    res.json({
-      message: '数据库连接成功',
-      project: PROJECT_PREFIX,
-      test: result[0],
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    console.error('数据库连接测试失败:', error);
-    res.status(500).json({
-      message: '数据库连接失败',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
-  }
-});
 
 // 公开API路由
 app.post('/comments', async (req, res) => {
@@ -147,24 +106,16 @@ app.get('/comments', async (req, res) => {
     const sql = (await import('@neondatabase/serverless')).neon(process.env.DATABASE_URL);
     const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'game_comment';
     
-    console.log(`[GET /comments] 查询项目: ${PROJECT_PREFIX}, pageId: ${pageId}`);
-    
     const comments = await sql(`
       SELECT id, name, email, text, rating, created_at as timestamp
       FROM ${PROJECT_PREFIX}_feedback
       WHERE game_address_bar = '${pageId}' AND text IS NOT NULL
       ORDER BY created_at DESC
     `);
-    
-    console.log(`[GET /comments] 找到 ${comments.length} 条评论`);
     res.json(comments);
   } catch (error) {
     console.error('获取评论失败:', error);
-    res.status(500).json({ 
-      message: '服务器错误',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 
@@ -229,8 +180,6 @@ app.get('/ratings', async (req, res) => {
     const sql = (await import('@neondatabase/serverless')).neon(process.env.DATABASE_URL);
     const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'game_comment';
     
-    console.log(`[GET /ratings] 查询项目: ${PROJECT_PREFIX}, pageId: ${pageId}`);
-    
     const stats = await sql(`
       SELECT 
         COUNT(rating) as count,
@@ -246,8 +195,6 @@ app.get('/ratings', async (req, res) => {
     
     const result = stats[0] || { count: 0, average: 0, rating_1: 0, rating_2: 0, rating_3: 0, rating_4: 0, rating_5: 0 };
     
-    console.log(`[GET /ratings] 找到 ${result.count} 个评分`);
-    
     res.json({
       count: result.count,
       average: result.average,
@@ -261,11 +208,7 @@ app.get('/ratings', async (req, res) => {
     });
   } catch (error) {
     console.error('获取评分失败:', error);
-    res.status(500).json({ 
-      message: '服务器错误',
-      error: error.message,
-      timestamp: new Date().toISOString()
-    });
+    res.status(500).json({ message: '服务器错误' });
   }
 });
 

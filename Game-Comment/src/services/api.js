@@ -4,12 +4,7 @@ const isLocalhost = window.location.hostname === 'localhost' || window.location.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
   (isLocalhost ? 'http://localhost:3000' : 'https://game-comment-api.vercel.app');
 
-// 调试环境变量
-console.log('环境变量调试:');
-console.log('- 当前域名:', window.location.hostname);
-console.log('- 是否本地环境:', isLocalhost);
-console.log('- VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
-console.log('- 最终API_BASE_URL:', API_BASE_URL);
+
 
 // 通用请求函数
 async function request(endpoint, options = {}) {
@@ -22,34 +17,17 @@ async function request(endpoint, options = {}) {
     ...options,
   };
 
-  // 添加调试信息
-  console.log('API请求调试信息:');
-  console.log('- API_BASE_URL:', API_BASE_URL);
-  console.log('- 完整URL:', url);
-  console.log('- 请求配置:', config);
-
   try {
-    console.log('- 开始发送请求...');
     const response = await fetch(url, config);
-    console.log('- 响应状态:', response.status);
-    console.log('- 响应状态文本:', response.statusText);
-    console.log('- 响应头:', Object.fromEntries(response.headers.entries()));
-    
-    if (!response.ok) {
-      console.error('- 响应不成功，状态码:', response.status);
-      const errorText = await response.text();
-      console.error('- 错误响应内容:', errorText);
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-    
     const data = await response.json();
-    console.log('- 响应数据:', data);
+
+    if (!response.ok) {
+      throw new Error(data.message || '请求失败');
+    }
+
     return data;
   } catch (error) {
     console.error('API请求错误:', error);
-    console.error('- 错误类型:', error.name);
-    console.error('- 错误消息:', error.message);
-    console.error('- 错误堆栈:', error.stack);
     throw error;
   }
 }
