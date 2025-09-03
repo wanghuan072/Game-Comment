@@ -1,0 +1,30 @@
+User-agent: *
+Allow: /
+
+# 禁止抓取开发与内部目录（可按主站策略调整）
+Disallow: /admin/
+Disallow: /api/
+Disallow: /node_modules/
+Disallow: /.git/
+Disallow: /src/
+
+# 允许静态资源
+Allow: /images/
+Allow: /css/
+Allow: /js/
+Allow: /favicon.ico
+
+# 站点地图位置（部署到生产后请确保域名正确）
+Sitemap: https://example.com/sitemap.xml
+
+# 爬取频率（可选）
+Crawl-delay: 1
+
+# 搜索引擎特定配置（可选）
+User-agent: Googlebot
+Crawl-delay: 0
+
+User-agent: Bingbot
+Crawl-delay: 1
+
+
