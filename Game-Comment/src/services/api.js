@@ -1,5 +1,15 @@
 // API 基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000';
+// 自动检测环境：如果是localhost则使用本地API，否则使用生产API
+const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+  (isLocalhost ? 'http://localhost:3000' : 'https://game-comment-api.vercel.app');
+
+// 调试环境变量
+console.log('环境变量调试:');
+console.log('- 当前域名:', window.location.hostname);
+console.log('- 是否本地环境:', isLocalhost);
+console.log('- VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
+console.log('- 最终API_BASE_URL:', API_BASE_URL);
 
 // 通用请求函数
 async function request(endpoint, options = {}) {

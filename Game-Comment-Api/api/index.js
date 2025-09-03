@@ -23,7 +23,8 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 const allowedOrigins = [
   'http://localhost:5173',  // 本地开发前端
   'http://localhost:3000',  // 本地开发后端（如果需要）
-  process.env.FRONTEND_URL  // 生产环境前端地址
+  'https://game-comment.vercel.app',  // 生产环境前端地址
+  process.env.FRONTEND_URL  // 环境变量中的前端地址
 ].filter(Boolean); // 过滤掉undefined值
 
 // 开发环境允许所有来源，生产环境使用限制的域名
