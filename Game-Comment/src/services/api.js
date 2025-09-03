@@ -29,21 +29,27 @@ async function request(endpoint, options = {}) {
   console.log('- 请求配置:', config);
 
   try {
+    console.log('- 开始发送请求...');
     const response = await fetch(url, config);
     console.log('- 响应状态:', response.status);
-    console.log('- 响应头:', response.headers);
+    console.log('- 响应状态文本:', response.statusText);
+    console.log('- 响应头:', Object.fromEntries(response.headers.entries()));
+    
+    if (!response.ok) {
+      console.error('- 响应不成功，状态码:', response.status);
+      const errorText = await response.text();
+      console.error('- 错误响应内容:', errorText);
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
     
     const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.message || '请求失败');
-    }
-
+    console.log('- 响应数据:', data);
     return data;
   } catch (error) {
     console.error('API请求错误:', error);
     console.error('- 错误类型:', error.name);
     console.error('- 错误消息:', error.message);
+    console.error('- 错误堆栈:', error.stack);
     throw error;
   }
 }
