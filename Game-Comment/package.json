@@ -9,10 +9,13 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:prod": "node scripts/deploy.js production && vite build",
     "preview": "vite preview",
     "lint": "eslint . --fix",
     "format": "prettier --write src/",
-    "test-api": "node scripts/test-api.js"
+    "test-api": "node scripts/test-api.js",
+    "deploy:dev": "node scripts/deploy.js development",
+    "deploy:prod": "node scripts/deploy.js production"
   },
   "dependencies": {
     "pinia": "^3.0.3",

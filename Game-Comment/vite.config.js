@@ -16,7 +16,7 @@ export default defineConfig({
     // 动态站点地图（基于数据自动生成路由）
     sitemap({
       // 【需替换】部署到生产后请替换为真实域名
-      hostname: 'https://example.com',
+      hostname: 'https://game-comment.vercel.app',
       dynamicRoutes: getAllRoutes(),
       readable: true,
       exclude: ['/404', '/error'],

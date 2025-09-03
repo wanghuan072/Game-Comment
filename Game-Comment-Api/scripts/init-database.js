@@ -39,8 +39,9 @@ async function initializeDatabase() {
 
     // 2. 创建项目特定游戏表（带前缀）
     console.log(`🎮 创建游戏表 ${PROJECT_PREFIX}_games...`);
+    const gamesTableName = `${PROJECT_PREFIX}_games`;
     await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_games')} (
+      CREATE TABLE IF NOT EXISTS ${sql(gamesTableName)} (
         id SERIAL PRIMARY KEY,
         address_bar VARCHAR(100) UNIQUE NOT NULL,
         title VARCHAR(200) NOT NULL,
@@ -51,8 +52,9 @@ async function initializeDatabase() {
 
     // 3. 创建项目特定评论表（带前缀）
     console.log(`💬 创建评论表 ${PROJECT_PREFIX}_comments...`);
+    const commentsTableName = `${PROJECT_PREFIX}_comments`;
     await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_comments')} (
+      CREATE TABLE IF NOT EXISTS ${sql(commentsTableName)} (
         id SERIAL PRIMARY KEY,
         game_address_bar VARCHAR(100) NOT NULL,
         name VARCHAR(100) NOT NULL,
@@ -60,26 +62,28 @@ async function initializeDatabase() {
         text TEXT NOT NULL,
         added_by_admin BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(PROJECT_PREFIX + '_games')}(address_bar) ON DELETE CASCADE
+        FOREIGN KEY (game_address_bar) REFERENCES ${sql(gamesTableName)}(address_bar) ON DELETE CASCADE
       )
     `;
 
     // 4. 创建项目特定评分表（带前缀）
     console.log(`⭐ 创建评分表 ${PROJECT_PREFIX}_ratings...`);
+    const ratingsTableName = `${PROJECT_PREFIX}_ratings`;
     await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_ratings')} (
+      CREATE TABLE IF NOT EXISTS ${sql(ratingsTableName)} (
         id SERIAL PRIMARY KEY,
         game_address_bar VARCHAR(100) NOT NULL,
         rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(PROJECT_PREFIX + '_games')}(address_bar) ON DELETE CASCADE
+        FOREIGN KEY (game_address_bar) REFERENCES ${sql(gamesTableName)}(address_bar) ON DELETE CASCADE
       )
     `;
 
     // 5. 创建项目特定评分统计视图（带前缀）
     console.log(`📊 创建评分统计视图 ${PROJECT_PREFIX}_rating_stats...`);
+    const ratingStatsViewName = `${PROJECT_PREFIX}_rating_stats`;
     await sql`
-      CREATE OR REPLACE VIEW ${sql(PROJECT_PREFIX + '_rating_stats')} AS
+      CREATE OR REPLACE VIEW ${sql(ratingStatsViewName)} AS
       SELECT 
         game_address_bar,
         COUNT(*) as total_votes,
@@ -89,16 +93,16 @@ async function initializeDatabase() {
         COUNT(CASE WHEN rating = 3 THEN 1 END) as rating_3,
         COUNT(CASE WHEN rating = 4 THEN 1 END) as rating_4,
         COUNT(CASE WHEN rating = 5 THEN 1 END) as rating_5
-      FROM ${sql(PROJECT_PREFIX + '_ratings')}
+      FROM ${sql(ratingsTableName)}
       GROUP BY game_address_bar
     `;
 
     // 6. 创建索引以提高查询性能（带前缀）
     console.log('🔍 创建索引...');
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_game_address_bar')} ON ${sql(PROJECT_PREFIX + '_comments')}(game_address_bar)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_created_at')} ON ${sql(PROJECT_PREFIX + '_comments')}(created_at)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_game_address_bar')} ON ${sql(PROJECT_PREFIX + '_ratings')}(game_address_bar)`;
-    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_created_at')} ON ${sql(PROJECT_PREFIX + '_ratings')}(created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_game_address_bar')} ON ${sql(commentsTableName)}(game_address_bar)`;
+    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_comments_created_at')} ON ${sql(commentsTableName)}(created_at)`;
+    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_game_address_bar')} ON ${sql(ratingsTableName)}(game_address_bar)`;
+    await sql`CREATE INDEX IF NOT EXISTS ${sql('idx_' + PROJECT_PREFIX + '_ratings_created_at')} ON ${sql(ratingsTableName)}(created_at)`;
 
     // 7. 创建默认管理员账户（带项目ID）
     console.log(`👤 创建默认管理员账户 (项目: ${PROJECT_PREFIX})...`);

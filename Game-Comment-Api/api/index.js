@@ -24,7 +24,8 @@ const corsOptions = {
   origin: [
     'http://localhost:5173', // 本地开发服务器
     'http://localhost:3000', // 本地API服务器
-    process.env.FRONTEND_URL || 'https://your-frontend-domain.com' // 生产环境前端域名
+    'https://game-comment.vercel.app', // 生产环境前端域名
+    process.env.FRONTEND_URL || 'https://game-comment.vercel.app' // 环境变量配置的前端域名
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -77,44 +78,42 @@ const initializeDatabase = async () => {
     `;
 
     // 创建项目特定游戏表（带前缀）
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_games')} (
-        id SERIAL PRIMARY KEY,
-        address_bar VARCHAR(100) UNIQUE NOT NULL,
-        title VARCHAR(200) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `;
+    const gamesTableName = `${PROJECT_PREFIX}_games`;
+    const createGamesTable = `CREATE TABLE IF NOT EXISTS ${gamesTableName} (
+      id SERIAL PRIMARY KEY,
+      address_bar VARCHAR(100) UNIQUE NOT NULL,
+      title VARCHAR(200) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`;
+    await sql(createGamesTable);
 
     // 创建项目特定评论表（带前缀）
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_comments')} (
-        id SERIAL PRIMARY KEY,
-        game_address_bar VARCHAR(100) NOT NULL,
-        name VARCHAR(100) NOT NULL,
-        email VARCHAR(254),
-        text TEXT NOT NULL,
-        added_by_admin BOOLEAN DEFAULT FALSE,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(PROJECT_PREFIX + '_games')}(address_bar) ON DELETE CASCADE
-      )
-    `;
+    const commentsTableName = `${PROJECT_PREFIX}_comments`;
+    const createCommentsTable = `CREATE TABLE IF NOT EXISTS ${commentsTableName} (
+      id SERIAL PRIMARY KEY,
+      game_address_bar VARCHAR(100) NOT NULL,
+      name VARCHAR(100) NOT NULL,
+      email VARCHAR(254),
+      text TEXT NOT NULL,
+      added_by_admin BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`;
+    await sql(createCommentsTable);
 
     // 创建项目特定评分表（带前缀）
-    await sql`
-      CREATE TABLE IF NOT EXISTS ${sql(PROJECT_PREFIX + '_ratings')} (
-        id SERIAL PRIMARY KEY,
-        game_address_bar VARCHAR(100) NOT NULL,
-        rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (game_address_bar) REFERENCES ${sql(PROJECT_PREFIX + '_games')}(address_bar) ON DELETE CASCADE
-      )
-    `;
+    const ratingsTableName = `${PROJECT_PREFIX}_ratings`;
+    const createRatingsTable = `CREATE TABLE IF NOT EXISTS ${ratingsTableName} (
+      id SERIAL PRIMARY KEY,
+      game_address_bar VARCHAR(100) NOT NULL,
+      rating INTEGER CHECK (rating >= 1 AND rating <= 5) NOT NULL,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`;
+    await sql(createRatingsTable);
 
     // 创建项目特定评分统计视图（带前缀）
-    await sql`
-      CREATE OR REPLACE VIEW ${sql(PROJECT_PREFIX + '_rating_stats')} AS
+    const ratingStatsViewName = `${PROJECT_PREFIX}_rating_stats`;
+    const createRatingStatsView = `CREATE OR REPLACE VIEW ${ratingStatsViewName} AS
       SELECT 
         game_address_bar,
         COUNT(*) as total_votes,
@@ -124,9 +123,9 @@ const initializeDatabase = async () => {
         COUNT(CASE WHEN rating = 3 THEN 1 END) as rating_3,
         COUNT(CASE WHEN rating = 4 THEN 1 END) as rating_4,
         COUNT(CASE WHEN rating = 5 THEN 1 END) as rating_5
-      FROM ${sql(PROJECT_PREFIX + '_ratings')}
-      GROUP BY game_address_bar
-    `;
+      FROM ${ratingsTableName}
+      GROUP BY game_address_bar`;
+    await sql(createRatingStatsView);
 
     console.log('数据库表结构初始化完成');
   } catch (error) {
