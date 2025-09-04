@@ -4,6 +4,9 @@ const isLocalhost = window.location.hostname === 'localhost' || window.location.
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
   (isLocalhost ? 'http://localhost:3000' : 'https://game-comment-api.vercel.app');
 
+console.log(`[API配置] 当前环境: ${isLocalhost ? '本地开发' : '生产环境'}`);
+console.log(`[API配置] API地址: ${API_BASE_URL}`);
+
 
 
 // 通用请求函数

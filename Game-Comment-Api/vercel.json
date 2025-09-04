@@ -1,8 +1,9 @@
 {
+  "name": "demo_racing_game-api",
   "version": 2,
   "builds": [
     {
-      "src": "api/*.js",
+      "src": "api/index.js",
       "use": "@vercel/node"
     }
   ],
@@ -11,5 +12,10 @@
       "src": "/(.*)",
       "dest": "/api/index.js"
     }
-  ]
+  ],
+  "env": {
+    "PROJECT_PREFIX": "demo_racing_game",
+    "DATABASE_URL": "@database_url",
+    "JWT_SECRET": "@jwt_secret"
+  }
 }

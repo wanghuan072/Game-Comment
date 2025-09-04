@@ -50,7 +50,7 @@ async function initializeDatabase() {
       CREATE TABLE IF NOT EXISTS game_admins_users (
         id SERIAL PRIMARY KEY,
         username VARCHAR(50) UNIQUE NOT NULL,
-        password_hash VARCHAR(255) NOT NULL,
+        password VARCHAR(255) NOT NULL,
         role VARCHAR(20) DEFAULT 'admin',
         project_id VARCHAR(50) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP

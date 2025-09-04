@@ -18,6 +18,71 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 const PROJECT_PREFIX = process.env.PROJECT_PREFIX || 'game_comment';
 console.log(`[统一反馈API] 使用项目前缀: ${PROJECT_PREFIX}`);
 
+// --- 项目验证中间件 ---
+async function validateProject(projectId) {
+  try {
+    const project = await sql`
+      SELECT id, is_active FROM game_projects 
+      WHERE project_id = ${projectId}
+    `;
+    
+    if (project.length === 0) {
+      throw new Error(`项目 "${projectId}" 未注册`);
+    }
+    
+    if (!project[0].is_active) {
+      throw new Error(`项目 "${projectId}" 已被停用`);
+    }
+    
+    return project[0];
+  } catch (error) {
+    // 如果项目注册表不存在，说明还没有升级数据库，允许继续使用
+    if (error.message.includes('relation "game_projects" does not exist')) {
+      console.log(`[项目验证] 项目注册表不存在，跳过验证 (项目: ${projectId})`);
+      return { id: null, is_active: true };
+    }
+    throw error;
+  }
+}
+
+// --- 管理员权限验证中间件 ---
+async function validateAdminPermission(adminId, projectId) {
+  try {
+    const admin = await sql`
+      SELECT gau.id, gau.username, gp.is_active as project_active
+      FROM game_admins_users gau
+      LEFT JOIN game_projects gp ON gau.project_id = gp.project_id
+      WHERE gau.id = ${adminId} AND gau.project_id = ${projectId}
+    `;
+    
+    if (admin.length === 0) {
+      throw new Error('管理员无权限访问此项目');
+    }
+    
+    // 如果项目注册表存在且项目被停用
+    if (admin[0].project_active === false) {
+      throw new Error('项目已被停用，无法操作');
+    }
+    
+    return admin[0];
+  } catch (error) {
+    // 如果项目注册表不存在，只检查管理员是否存在
+    if (error.message.includes('relation "game_projects" does not exist')) {
+      const admin = await sql`
+        SELECT id, username FROM game_admins_users 
+        WHERE id = ${adminId} AND project_id = ${projectId}
+      `;
+      
+      if (admin.length === 0) {
+        throw new Error('管理员无权限访问此项目');
+      }
+      
+      return { ...admin[0], project_active: true };
+    }
+    throw error;
+  }
+}
+
 // --- 管理员账户初始化函数 ---
 const initializeAdmin = async () => {
   try {
@@ -124,6 +189,14 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: '请输入用户名和密码' });
     }
 
+    // 验证项目是否有效
+    try {
+      await validateProject(PROJECT_PREFIX);
+    } catch (projectError) {
+      console.error(`[管理员登录] 项目验证失败: ${projectError.message}`);
+      return res.status(403).json({ message: `项目访问被拒绝: ${projectError.message}` });
+    }
+
     const admin = await sql`
       SELECT id, username, password, role, project_id, created_at
       FROM game_admins_users 
@@ -138,6 +211,14 @@ export const adminLogin = async (req, res) => {
     const isValidPassword = await bcrypt.compare(password, adminData.password);
     if (!isValidPassword) {
       return res.status(401).json({ message: '用户名或密码错误' });
+    }
+
+    // 验证管理员权限
+    try {
+      await validateAdminPermission(adminData.id, PROJECT_PREFIX);
+    } catch (permissionError) {
+      console.error(`[管理员登录] 权限验证失败: ${permissionError.message}`);
+      return res.status(403).json({ message: `权限验证失败: ${permissionError.message}` });
     }
 
     const token = jwt.sign(
@@ -157,13 +238,15 @@ export const adminLogin = async (req, res) => {
       WHERE id = ${adminData.id}
     `;
 
+    console.log(`[管理员登录] 项目 ${PROJECT_PREFIX} 管理员 ${username} 登录成功`);
     res.status(200).json({
       token,
       message: '登录成功',
       user: {
         id: adminData.id,
         username: adminData.username,
-        role: adminData.role
+        role: adminData.role,
+        project_id: adminData.project_id
       }
     });
   } catch (error) {
@@ -183,12 +266,28 @@ export const verifyAdminToken = async (req, res, next) => {
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
     
+    // 验证项目是否有效
+    try {
+      await validateProject(PROJECT_PREFIX);
+    } catch (projectError) {
+      console.error(`[Token验证] 项目验证失败: ${projectError.message}`);
+      return res.status(403).json({ message: `项目访问被拒绝: ${projectError.message}` });
+    }
+    
     const admin = await sql`
       SELECT id, username, role, project_id FROM game_admins_users WHERE id = ${decoded.id} AND project_id = ${PROJECT_PREFIX}
     `;
     
     if (admin.length === 0) {
       return res.status(401).json({ message: '管理员账户不存在或项目不匹配' });
+    }
+
+    // 验证管理员权限
+    try {
+      await validateAdminPermission(admin[0].id, PROJECT_PREFIX);
+    } catch (permissionError) {
+      console.error(`[Token验证] 权限验证失败: ${permissionError.message}`);
+      return res.status(403).json({ message: `权限验证失败: ${permissionError.message}` });
     }
 
     req.user = {
@@ -200,13 +299,27 @@ export const verifyAdminToken = async (req, res, next) => {
     
     next();
   } catch (error) {
-    return res.status(401).json({ message: '无效的认证令牌' });
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: '无效的认证令牌' });
+    }
+    console.error('[Token验证] 验证过程出错:', error);
+    return res.status(500).json({ message: '认证验证失败' });
   }
 };
 
 // --- 获取所有游戏数据（统一表方案） ---
 export const getAllGameData = async (req, res) => {
   try {
+    // 检查表是否有project_id字段
+    const hasProjectIdColumn = await sql`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = ${PROJECT_PREFIX + '_feedback'} 
+      AND column_name = 'project_id'
+    `;
+
+    const projectIdFilter = hasProjectIdColumn.length > 0 ? `AND project_id = '${PROJECT_PREFIX}'` : '';
+    
     // 获取所有反馈数据（评论和评分）
     const feedbackData = await sql(`
       SELECT 
@@ -221,6 +334,7 @@ export const getAllGameData = async (req, res) => {
         COUNT(CASE WHEN rating = 4 THEN 1 END) as rating_4,
         COUNT(CASE WHEN rating = 5 THEN 1 END) as rating_5
       FROM ${PROJECT_PREFIX}_feedback
+      WHERE 1=1 ${projectIdFilter}
       GROUP BY game_address_bar
       ORDER BY game_address_bar
     `);
@@ -237,7 +351,7 @@ export const getAllGameData = async (req, res) => {
         added_by_admin,
         created_at as timestamp
       FROM ${PROJECT_PREFIX}_feedback
-      WHERE text IS NOT NULL
+      WHERE text IS NOT NULL ${projectIdFilter}
       ORDER BY created_at DESC
     `);
 
